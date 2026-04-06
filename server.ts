@@ -8,6 +8,7 @@ dotenv.config({ path: ".env.local" });
 
 const app = express();
 const PORT = 3000;
+const GOOGLE_SHEET_ID = "PASTE_YOUR_GOOGLE_SHEET_ID_HERE";
 
 app.use(express.json());
 
@@ -26,7 +27,7 @@ const sheets = google.sheets({ version: "v4", auth });
 app.post("/api/submit", async (req, res) => {
   const { username, answers, timestamp } = req.body;
 
-  if (!process.env.GOOGLE_SHEET_ID) {
+  if (!GOOGLE_SHEET_ID) {
     console.error("GOOGLE_SHEET_ID is missing");
     return res.status(500).json({ error: "Server configuration error" });
   }
@@ -40,7 +41,7 @@ app.post("/api/submit", async (req, res) => {
     }
 
     await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      spreadsheetId: GOOGLE_SHEET_ID,
       range: "Sheet1!A:P",
       valueInputOption: "USER_ENTERED",
       requestBody: {
