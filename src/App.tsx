@@ -4,6 +4,8 @@ import { Bolt, CheckCircle, ChevronRight, Timer, Award, BarChart3, Lightbulb, Us
 import { QUESTIONS } from './constants';
 import { AppState } from './types';
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+
 export default function App() {
   const [appState, setAppState] = useState<AppState>('landing');
   const [currentStep, setCurrentStep] = useState(0);
@@ -24,7 +26,7 @@ export default function App() {
   const submitToGoogleSheets = async (finalAnswers: Record<number, number>) => {
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/submit', {
+      const response = await fetch(`${API_BASE_URL}/api/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
