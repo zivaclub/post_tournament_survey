@@ -213,6 +213,7 @@ export default function App() {
               onPlayersImport={handlePlayersImport}
               onPreSurveyImport={handlePreSurveyImport}
               preLoadedCount={preSurveyData.length}
+              preSurveyData={preSurveyData}
             />
           )}
           {appState === "survey" && (
@@ -225,9 +226,10 @@ export default function App() {
               onNext={handleNext}
               onBack={handleBack}
               isSubmitting={isSubmitting}
+              hasPreSurvey={selectedPre !== undefined}
             />
           )}
-          {appState === "complete" && latestReport && (
+          {appState === "complete" && latestReport && selectedPre && (
             <CompletionPage
               name={selectedPlayer}
               report={latestReport}
@@ -239,6 +241,33 @@ export default function App() {
                 setSelectedPlayer("");
               }}
             />
+          )}
+          {appState === "complete" && latestReport && !selectedPre && (
+            <div className="flex-1 flex flex-col px-6 pt-8 pb-24">
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex-1 flex flex-col items-center justify-center">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-[0_0_30px_rgba(80,244,227,0.4)] mb-6">
+                  <CheckCircle className="text-on-primary w-12 h-12" />
+                </div>
+                <h2 className="text-2xl font-extrabold tracking-tight mb-3 text-center text-on-surface">
+                  Thank You, {selectedPlayer}!
+                </h2>
+                <p className="text-on-surface-variant text-center mb-8 max-w-md">
+                  Your post-tournament survey has been submitted successfully. Since you haven't completed the pre-tournament survey, a comparative report cannot be generated.
+                </p>
+                <button 
+                  onClick={() => {
+                    setAppState("landing");
+                    setCurrentStep(0);
+                    setAnswers({});
+                    setNameQuery("");
+                    setSelectedPlayer("");
+                  }}
+                  className="w-full py-4 rounded-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-extrabold uppercase tracking-widest text-sm"
+                >
+                  Back to Start
+                </button>
+              </motion.div>
+            </div>
           )}
           {appState === "admin" && <AdminPage submissions={submissions} onBack={() => setAppState("landing")} />}
         </AnimatePresence>
@@ -274,6 +303,7 @@ function LandingPage({
   onPlayersImport,
   onPreSurveyImport,
   preLoadedCount,
+  preSurveyData,
 }: {
   onStart: () => void;
   players: Player[];
@@ -284,8 +314,15 @@ function LandingPage({
   onPlayersImport: (file?: File) => void;
   onPreSurveyImport: (file?: File) => void;
   preLoadedCount: number;
+  preSurveyData: any[];
 }) {
-  const validSelection = selectedPlayer.length > 0 && players.some((p) => p.name === selectedPlayer);
+  const validSelection = selectedPlayer.length > 0;
+  const hasPreSurvey = preSurveyData.some((p) => p.name.toLowerCase() === selectedPlayer.toLowerCase());
+  const showSuggestions = nameQuery && nameQuery.length > 0 && players.length > 0;
+  const filteredSuggestions = players.filter((p) => 
+    p.name.toLowerCase().includes(nameQuery.toLowerCase()) && 
+    p.name.toLowerCase() !== nameQuery.toLowerCase()
+  );
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col pb-24">
@@ -322,18 +359,33 @@ function LandingPage({
             placeholder="Enter your full name..."
             className="w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg px-4 py-2.5 text-on-surface focus:outline-none focus:border-primary transition-colors text-sm"
           />
-          {nameQuery && players.length > 0 && (
+          {showSuggestions && filteredSuggestions.length > 0 && (
             <div className="mt-2 max-h-32 overflow-auto space-y-1">
               <p className="text-[10px] text-on-surface-variant mb-1">Suggestions:</p>
-              {players.map((p) => (
+              {filteredSuggestions.slice(0, 5).map((p) => (
                 <button
                   key={p.name}
-                  onClick={() => onSelectPlayer(p.name)}
-                  className={`w-full text-left px-3 py-2 rounded-md text-xs ${selectedPlayer === p.name ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant"}`}
+                  onClick={() => {
+                    onSelectPlayer(p.name);
+                    setNameQuery(p.name);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-md text-xs bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
                 >
                   {p.name}
                 </button>
               ))}
+            </div>
+          )}
+          {selectedPlayer && (
+            <div className="mt-2 p-2 rounded-md bg-surface-container-high">
+              <p className="text-xs text-on-surface-variant">
+                Selected: <span className="font-bold text-primary">{selectedPlayer}</span>
+                {hasPreSurvey ? (
+                  <span className="text-secondary ml-2">✓ Pre-survey found</span>
+                ) : (
+                  <span className="text-warning ml-2">⚠ No pre-survey data</span>
+                )}
+              </p>
             </div>
           )}
         </div>
@@ -343,7 +395,7 @@ function LandingPage({
           <div className="glass-card p-5 rounded-lg border-l-2 border-secondary flex flex-col justify-between h-32">
             <Timer className="text-secondary w-5 h-5" />
             <div>
-              <div className="text-2xl font-black text-on-surface">2:00</div>
+              <div className="text-2xl font-black text-on-surface">5:00</div>
               <div className="text-[9px] uppercase tracking-widest text-on-surface-variant font-bold">Est. Time</div>
             </div>
           </div>
@@ -371,7 +423,7 @@ function LandingPage({
         >
           Go to Pre-Survey
         </button>
-        <p className="text-[9px] text-on-surface-variant uppercase tracking-widest font-bold opacity-60">Only listed players can submit</p>
+        <p className="text-[9px] text-on-surface-variant uppercase tracking-widest font-bold opacity-60"><span className="font-black">Players who have done pre tournament survey will only get personal stats so please fill pre survey if not already done.</span></p>
       </section>
     </motion.div>
   );
@@ -386,6 +438,7 @@ function SurveyPage({
   onNext,
   onBack,
   isSubmitting,
+  hasPreSurvey,
 }: {
   currentStep: number;
   totalSteps: number;
@@ -395,9 +448,11 @@ function SurveyPage({
   onNext: () => void;
   onBack: () => void;
   isSubmitting: boolean;
+  hasPreSurvey: boolean;
 }) {
   const progress = ((currentStep + 1) / totalSteps) * 100;
   const isText = question.inputType === "text";
+  const isNumber = question.inputType === "number";
   const answerReady = isText ? String(selectedAnswer || "").trim().length > 0 : selectedAnswer !== undefined;
 
   return (
@@ -438,6 +493,24 @@ function SurveyPage({
             placeholder={question.inputPlaceholder}
             className="w-full min-h-28 bg-surface-container-high border border-outline-variant/20 rounded-lg p-3 text-sm focus:outline-none focus:border-primary"
           />
+        ) : isNumber ? (
+          <div className="space-y-4">
+            <div className="flex justify-center items-center mb-4">
+              <span className="text-lg font-black text-primary mr-4">Selected: {selectedAnswer || question.min || 1}</span>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {Array.from({ length: (question.max || 10) - (question.min || 1) + 1 }, (_, i) => (question.min || 1) + i).map((num) => (
+                <button
+                  key={num}
+                  onClick={() => onSelect(num)}
+                  disabled={isSubmitting}
+                  className={`py-3 rounded-lg text-sm font-bold transition-all ${selectedAnswer === num ? "bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-[0_0_15px_rgba(80,244,227,0.3)] transform scale-[1.02]" : "bg-surface-container-high text-on-surface-variant hover:border-primary/50 border border-outline-variant/20"}`}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-3">
             {question.options?.map((opt) => (
@@ -461,7 +534,7 @@ function SurveyPage({
             Back
           </button>
           <button onClick={onNext} disabled={!answerReady || isSubmitting} className={`flex-[2] py-3 px-4 rounded-full font-black uppercase tracking-widest text-[10px] shadow-lg active:scale-95 transition-all ${answerReady && !isSubmitting ? "bg-gradient-to-r from-secondary to-primary-container text-on-primary" : "bg-surface-variant text-on-surface-variant cursor-not-allowed"}`}>
-            {isSubmitting ? "Submitting..." : currentStep === totalSteps - 1 ? "Generate Report" : "Next Question"}
+            {isSubmitting ? "Submitting..." : currentStep === totalSteps - 1 ? (hasPreSurvey ? "Generate Report" : "Submit") : "Next Question"}
           </button>
         </div>
       </section>
@@ -472,21 +545,79 @@ function SurveyPage({
 function CompletionPage({ name, report, onReset }: { name: string; report: ComputedReport; onReset: () => void }) {
   const handleDownload = async () => {
     try {
+      // Import html2canvas dynamically
       const html2canvas = (await import('html2canvas')).default;
       const element = document.getElementById('report-content');
-      if (element) {
-        const canvas = await html2canvas(element, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-        });
-        const link = document.createElement('a');
-        link.download = `${name.replace(/\s+/g, '_')}_growth_report.png`;
-        link.href = canvas.toDataURL();
-        link.click();
+      
+      if (!element) {
+        console.error('Report element not found');
+        alert('Report content not found. Please try again.');
+        return;
       }
+
+      console.log('Starting download process...');
+      
+      // Wait a bit for any pending renders
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Temporarily override CSS to avoid oklab color parsing issues
+      const originalStyle = document.createElement('style');
+      originalStyle.innerHTML = `
+        #report-content, #report-content * {
+          background-color: #1a1a1a !important;
+          color: #ffffff !important;
+        }
+        #report-content .text-primary { color: #00f4e3 !important; }
+        #report-content .text-secondary { color: #2efd7c !important; }
+        #report-content .text-tertiary { color: #6366f1 !important; }
+        #report-content .glass-card { 
+          background-color: #2a2a2a !important;
+          border: 1px solid #444 !important;
+        }
+      `;
+      document.head.appendChild(originalStyle);
+      
+      try {
+        // Capture the element
+        const canvas = await html2canvas(element, {
+          backgroundColor: '#1a1a1a',
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          width: element.scrollWidth,
+          height: element.scrollHeight,
+          windowWidth: element.scrollWidth,
+          windowHeight: element.scrollHeight,
+        });
+        
+        console.log('Canvas created successfully');
+        
+        // Convert to blob and download
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${name.replace(/\s+/g, '_')}_growth_report.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            console.log('Download completed successfully');
+          } else {
+            console.error('Failed to create blob from canvas');
+            alert('Failed to generate image. Please try again.');
+          }
+        }, 'image/png');
+      } finally {
+        // Remove the temporary style
+        document.head.removeChild(originalStyle);
+      }
+      
     } catch (error) {
       console.error('Error downloading report:', error);
-      alert('Failed to download report. Please try again.');
+      alert(`Failed to download report: ${error.message || 'Unknown error'}. Please try again.`);
     }
   };
 
@@ -499,27 +630,48 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
         </div>
       </div>
 
-      <div id="report-content" className="bg-white p-6 rounded-lg shadow-lg mb-6">
-        <h2 className="text-2xl font-extrabold tracking-tight mb-3 text-center text-gray-800">
-          {name} - Ziva Growth Report
-        </h2>
-
-        <div className="bg-gray-50 rounded-lg p-4 space-y-2 mb-6">
-          <p className="text-sm text-gray-700">Confidence Score: <span className="text-secondary font-bold">{report.confidenceScore}%</span></p>
-          <p className="text-sm text-gray-700">Energy Score: <span className="text-secondary font-bold">{report.energyScore}%</span></p>
-          <p className="text-sm text-gray-700">Social Confidence: <span className="text-secondary font-bold">{report.socialConfidence}%</span></p>
-          <p className="text-sm text-gray-700">Mental Wellness Change: <span className="text-secondary font-bold">{report.mentalWellnessChange}%</span></p>
+      <div id="report-content" className="bg-surface-container-low p-6 rounded-lg shadow-lg mb-6 border border-outline-variant/20" style={{ backgroundColor: '#1a1a1a', minHeight: '600px' }}>
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-extrabold tracking-tight text-on-surface" style={{ color: '#ffffff' }}>
+            {name}
+          </h2>
+          <p className="text-lg font-bold text-primary mt-1" style={{ color: '#00f4e3' }}>Ziva Growth Report</p>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          <p className="font-bold mb-2 text-gray-800">Strengths</p>
-          {report.strengths.map((item) => <p className="text-sm text-gray-600" key={item}>- {item}</p>)}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="glass-card p-4 rounded-lg border-l-2 border-primary">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#00f4e3' }}>Confidence</p>
+            <p className="text-2xl font-black text-primary" style={{ color: '#00f4e3' }}>{report.confidenceScore}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-secondary">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#2efd7c' }}>Energy</p>
+            <p className="text-2xl font-black text-secondary" style={{ color: '#2efd7c' }}>{report.energyScore}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-tertiary">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#6366f1' }}>Social</p>
+            <p className="text-2xl font-black text-tertiary" style={{ color: '#6366f1' }}>{report.socialConfidence}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-primary">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#00f4e3' }}>Mental Wellness</p>
+            <p className="text-2xl font-black text-primary" style={{ color: '#00f4e3' }}>{report.mentalWellnessChange}%</p>
+          </div>
         </div>
-        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-          <p className="font-bold mb-2 text-gray-800">Suggested Next Step</p>
-          {report.suggestions.map((item) => <p className="text-sm text-gray-600" key={item}>- {item}</p>)}
+
+        <div className="glass-card p-4 rounded-lg mb-4 bg-surface-container-high" style={{ backgroundColor: '#2a2a2a' }}>
+          <p className="font-bold mb-3 text-on-surface flex items-center gap-2" style={{ color: '#ffffff' }}>
+            <Award className="w-4 h-4 text-primary" style={{ color: '#00f4e3' }} />
+            Strengths
+          </p>
+          {report.strengths.map((item) => <p className="text-sm text-on-surface-variant mb-1" style={{ color: '#e0e0e0' }} key={item}>• {item}</p>)}
         </div>
-        <div className="text-center text-xs text-gray-500 mt-4">
+        <div className="glass-card p-4 rounded-lg mb-4 bg-surface-container-high" style={{ backgroundColor: '#2a2a2a' }}>
+          <p className="font-bold mb-3 text-on-surface flex items-center gap-2" style={{ color: '#ffffff' }}>
+            <Lightbulb className="w-4 h-4 text-secondary" style={{ color: '#2efd7c' }} />
+            Suggested Next Steps
+          </p>
+          {report.suggestions.map((item) => <p className="text-sm text-on-surface-variant mb-1" style={{ color: '#e0e0e0' }} key={item}>• {item}</p>)}
+        </div>
+        <div className="text-center text-xs text-on-surface-variant mt-4 pt-4 border-t border-outline-variant/20" style={{ color: '#00f4e3', borderTopColor: '#444' }}>
           Generated on {new Date().toLocaleDateString()}
         </div>
       </div>

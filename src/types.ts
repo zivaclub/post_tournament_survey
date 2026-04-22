@@ -11,8 +11,10 @@ export interface Question {
   text: string;
   highlight?: string;
   options?: QuestionOption[];
-  inputType?: "options" | "text";
+  inputType?: "options" | "text" | "number";
   inputPlaceholder?: string;
+  min?: number;
+  max?: number;
   image?: string;
   hint?: string;
 }
