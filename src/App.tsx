@@ -560,35 +560,75 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
       // Wait a bit for any pending renders
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Temporarily override CSS to avoid oklab color parsing issues
-      const originalStyle = document.createElement('style');
-      originalStyle.innerHTML = `
-        #report-content, #report-content * {
-          background-color: #1a1a1a !important;
-          color: #ffffff !important;
-        }
-        #report-content .text-primary { color: #00f4e3 !important; }
-        #report-content .text-secondary { color: #2efd7c !important; }
-        #report-content .text-tertiary { color: #6366f1 !important; }
-        #report-content .glass-card { 
-          background-color: #2a2a2a !important;
-          border: 1px solid #444 !important;
-        }
+      // Create a new clean element instead of cloning
+      const cleanElement = document.createElement('div');
+      cleanElement.id = 'report-content-clean';
+      cleanElement.style.cssText = `
+        background-color: #1a1a1a;
+        color: #ffffff;
+        padding: 24px;
+        border-radius: 12px;
+        font-family: system-ui, -apple-system, sans-serif;
+        min-height: 600px;
+        width: 600px;
+        position: relative;
       `;
-      document.head.appendChild(originalStyle);
+      
+      // Build the report content manually
+      const reportHTML = `
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="color: #ffffff; font-size: 24px; font-weight: 800; margin-bottom: 8px;">${name}</h2>
+          <p style="color: #00f4e3; font-size: 18px; font-weight: 700;">Ziva Growth Report</p>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #00f4e3;">
+            <p style="color: #00f4e3; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">CONFIDENCE</p>
+            <p style="color: #00f4e3; font-size: 24px; font-weight: 800; margin: 0;">${report.confidenceScore}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #2efd7c;">
+            <p style="color: #2efd7c; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">ENERGY</p>
+            <p style="color: #2efd7c; font-size: 24px; font-weight: 800; margin: 0;">${report.energyScore}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #6366f1;">
+            <p style="color: #6366f1; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">SOCIAL</p>
+            <p style="color: #6366f1; font-size: 24px; font-weight: 800; margin: 0;">${report.socialConfidence}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #00f4e3;">
+            <p style="color: #00f4e3; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">MENTAL WELLNESS</p>
+            <p style="color: #00f4e3; font-size: 24px; font-weight: 800; margin: 0;">${report.mentalWellnessChange}%</p>
+          </div>
+        </div>
+        <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+          <p style="color: #ffffff; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🏆 STRENGTHS</p>
+          ${report.strengths.map(strength => `<p style="color: #e0e0e0; font-size: 14px; margin: 0 0 4px 0;">• ${strength}</p>`).join('')}
+        </div>
+        <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+          <p style="color: #ffffff; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">💡 SUGGESTED NEXT STEPS</p>
+          ${report.suggestions.map(suggestion => `<p style="color: #e0e0e0; font-size: 14px; margin: 0 0 4px 0;">• ${suggestion}</p>`).join('')}
+        </div>
+        <div style="text-align: center; padding-top: 16px; border-top: 1px solid #444; margin-top: 16px;">
+          <p style="color: #00f4e3; font-size: 12px; margin: 0;">Generated on ${new Date().toLocaleDateString()}</p>
+        </div>
+      `;
+      
+      cleanElement.innerHTML = reportHTML;
+      
+      // Temporarily add the clean element to the DOM
+      cleanElement.style.position = 'absolute';
+      cleanElement.style.left = '-9999px';
+      cleanElement.style.top = '-9999px';
+      document.body.appendChild(cleanElement);
       
       try {
-        // Capture the element
-        const canvas = await html2canvas(element, {
+        // Capture the clean element
+        const canvas = await html2canvas(cleanElement, {
           backgroundColor: '#1a1a1a',
           scale: 2,
           useCORS: true,
           allowTaint: true,
           logging: false,
-          width: element.scrollWidth,
-          height: element.scrollHeight,
-          windowWidth: element.scrollWidth,
-          windowHeight: element.scrollHeight,
+          width: 600,
+          height: 800,
         });
         
         console.log('Canvas created successfully');
@@ -611,8 +651,8 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
           }
         }, 'image/png');
       } finally {
-        // Remove the temporary style
-        document.head.removeChild(originalStyle);
+        // Remove the clean element
+        document.body.removeChild(cleanElement);
       }
       
     } catch (error) {
