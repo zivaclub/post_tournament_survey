@@ -383,7 +383,7 @@ function CompletionPage({ onReset }: { onReset: () => void; key?: string }) {
         >
           Back to Dashboard
         </button>
-        
+         
       </div>
     </motion.div>
   );
