@@ -98,34 +98,37 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 8,
-    category: "Skill Assessment",
-    text: "How do I rate myself in this sport",
-    hint: "Be honest with your current level. This data helps us tailor your training pulse.",
+    category: "Confidence / Growth",
+    text: "How do you rate yourself in this sport now?",
+    hint: "Rate your current level after the tournament.",
     options: [
-      { label: "Beginner", value: 1 },
-      { label: "Novice", value: 2 },
-      { label: "Intermediate", value: 3 },
-      { label: "Advanced", value: 4 },
-      { label: "Elite", value: 5 },
+      { label: "1", value: 1 },
+      { label: "2", value: 2 },
+      { label: "3", value: 3 },
+      { label: "4", value: 4 },
+      { label: "5", value: 5 },
+      { label: "6", value: 6 },
+      { label: "7", value: 7 },
+      { label: "8", value: 8 },
+      { label: "9", value: 9 },
+      { label: "10", value: 10 },
     ]
   },
   {
     id: 9,
-    category: "Daily Vitality Check",
-    text: "I feel energetic throughout the day",
+    category: "Confidence / Growth",
+    text: "Compared to before the tournament, my confidence has:",
     options: [
-      { label: "Completely Disagree", value: 1 },
-      { label: "Somewhat Disagree", value: 2 },
-      { label: "Neutral", value: 3 },
-      { label: "Somewhat Agree", value: 4 },
-      { label: "Completely Agree", value: 5 },
+      { label: "Decreased", value: 1 },
+      { label: "Same", value: 2 },
+      { label: "Improved Slightly", value: 3 },
+      { label: "Improved A Lot", value: 4 },
     ]
   },
   {
     id: 10,
-    category: "Current Status",
-    text: "My body feels active and not tired.",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuB35U3VdziQjzMuapMTq9USGu2QXxfM9y4Ewt3m4trmYde2YYlEHApLnfZLEdnOkeR80LtpKBmeltHdN1EzKfXvWYUVBooU8eQVKsE888EmZUU4j_Fis6XM_di78vbVz4sXgrBteW5cVhsCvZk-Ozf2IviYt31GaYSZiRjwlWFe7r2_0o11v92VBy4gZNeV7qHUJmneRWvwdpaHDdG9UiTPrMy0LtFY80p2duw8XUYuJkma7NN61ZGeDgvJaCyfAQj2nz3RAh-sEjc",
+    category: "Confidence / Growth",
+    text: "I now feel more comfortable competing with others",
     options: [
       { label: "Strongly Disagree", value: 1 },
       { label: "Disagree", value: 2 },
@@ -136,34 +139,42 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 11,
-    category: "Physical Activity",
-    text: "I regularly participate in physical activities or sports",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAU8LxPCnhvQUnkVBX1UuVF4ME4ABJeuV-F4HAQYoE74_PfwAF9N2XjPuQ0tleDLmbQp5L2WQ9kkm_C8oNXFKiXjcNBx0PDuF4HtViDFpTm8EEnW-Y9fn1-jEzZED_St0Ul4CqGYrWzNduQo42CODGPe8T64PkpNnoDiVYK5w9DupB7jK3-nNOp5HIiUDtjmEQcaUcxa-WMpVIjBVhSZJWXuF7AbEuRUcxNFx4uqaHRFnXQddvJekBKlHDMoFfIdD2wv6BNRNsaH_k",
+    category: "Physical",
+    text: "Since participating, I feel more motivated to stay active",
     options: [
-      { label: "Rarely active", value: 1 },
-      { label: "Occasional movement", value: 2 },
-      { label: "Moderate (2-3 times)", value: 3 },
-      { label: "4-5 times a week", value: 4 },
-      { label: "Daily performance", value: 5 },
+      { label: "Strongly Disagree", value: 1 },
+      { label: "Disagree", value: 2 },
+      { label: "Neutral", value: 3 },
+      { label: "Agree", value: 4 },
+      { label: "Strongly Agree", value: 5 },
     ]
   },
   {
     id: 12,
-    category: "Social Assessment",
-    text: "I feel socially confident in group environments",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCDbTOTqp9RBt3ajmaxtBHx6nJlAYSk8CMUneVq9tGaQnTDgc6fk2ZIfafElbsJBF0xfAbMo6Y3MBv67DvSM7LHDfXgVvfMF1YC4IBrCf479ocJFp0vaghagIfCVkmXx8B8Bpu9YHgpm5-xraG3ek5E34bKGSgLU3RUrLpZN_LEklePfFp10steQ9kZXwqG_PJHB-rCcsK8M9ZpL-9uJrRpA9fcXVfRKUNXwplB5lpj_v8eNKDDunvinV_6EmOqQ9ZCws3faKWtoKg",
+    category: "Physical",
+    text: "The tournament pushed me to give my physical best",
     options: [
-      { label: "Significant Anxiety", value: 1 },
-      { label: "Somewhat Anxious", value: 2 },
-      { label: "Neither/Nor", value: 3 },
-      { label: "Moderately Confident", value: 4 },
-      { label: "Absolutely Confident", value: 5 },
+      { label: "Strongly Disagree", value: 1 },
+      { label: "Disagree", value: 2 },
+      { label: "Neutral", value: 3 },
+      { label: "Agree", value: 4 },
+      { label: "Strongly Agree", value: 5 },
     ]
   },
   {
     id: 13,
-    category: "Final Step",
-    text: "I am willing to try new challenges or activities",
+    category: "Social",
+    text: "I made new friends/connections through this tournament",
+    options: [
+      { label: "Yes", value: 3 },
+      { label: "Somewhat", value: 2 },
+      { label: "No", value: 1 },
+    ]
+  },
+  {
+    id: 14,
+    category: "Social",
+    text: "I feel more confident in group environments now",
     options: [
       { label: "Strongly Disagree", value: 1 },
       { label: "Disagree", value: 2 },
@@ -173,15 +184,47 @@ export const QUESTIONS: Question[] = [
     ]
   },
   {
-    id: 14,
-    category: "Final Step",
-    text: "I am willing to try new challenges or activities",
+    id: 15,
+    category: "Experience",
+    text: "Overall tournament experience",
     options: [
-      { label: "Strongly Disagree", value: 1 },
-      { label: "Disagree", value: 2 },
-      { label: "Neutral", value: 3 },
-      { label: "Agree", value: 4 },
-      { label: "Strongly Agree", value: 5 },
+      { label: "1", value: 1 },
+      { label: "2", value: 2 },
+      { label: "3", value: 3 },
+      { label: "4", value: 4 },
+      { label: "5", value: 5 },
+      { label: "6", value: 6 },
+      { label: "7", value: 7 },
+      { label: "8", value: 8 },
+      { label: "9", value: 9 },
+      { label: "10", value: 10 },
+    ]
+  },
+  {
+    id: 16,
+    category: "Experience",
+    text: "Biggest takeaway from the tournament",
+    inputType: "text",
+    inputPlaceholder: "Share your biggest takeaway..."
+  },
+  {
+    id: 17,
+    category: "Future Intent",
+    text: "Would you participate in future Ziva tournaments?",
+    options: [
+      { label: "Yes", value: "Yes" },
+      { label: "Maybe", value: "Maybe" },
+      { label: "No", value: "No" },
+    ]
+  },
+  {
+    id: 18,
+    category: "Future Intent",
+    text: "Would you like personal stats/reports in future?",
+    options: [
+      { label: "Yes", value: "Yes" },
+      { label: "Maybe", value: "Maybe" },
+      { label: "No", value: "No" },
     ]
   }
 ];
