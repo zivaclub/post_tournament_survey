@@ -16,15 +16,32 @@ import logo from "./logo.svg";
 const STORAGE_KEY = "ziva-post-survey-submissions";
 const DEFAULT_PLAYERS: Player[] = [{ name: "Rahul Sharma" }, { name: "Amit Patel" }, { name: "Priya Shah" }];
 
-// Load data from sample-data directory
-const loadSampleData = async () => {
+// Load data from Google Sheets API
+const loadGoogleSheetsData = async () => {
   try {
-    // Import the JSON files directly
-    const { default: playersData } = await import('./sample-data/players.sample.json');
-    const { default: preSurveyData } = await import('./sample-data/pre-survey.sample.json');
+    // Fetch player names and pre-survey data from API endpoints
+    const [playersResponse, preSurveyResponse] = await Promise.all([
+      fetch('/api/players'),
+      fetch('/api/pre-survey')
+    ]);
+
+    if (!playersResponse.ok || !preSurveyResponse.ok) {
+      throw new Error('Failed to fetch data from Google Sheets');
+    }
+
+    const playersData = await playersResponse.json();
+    const preSurveyData = await preSurveyResponse.json();
+
+    console.log('Loaded data from Google Sheets:', { 
+      playersCount: playersData.length, 
+      preSurveyCount: preSurveyData.length 
+    });
+
     return { playersData, preSurveyData };
   } catch (error) {
-    console.error('Error loading sample data:', error);
+    console.error('Error loading Google Sheets data:', error);
+    // Fallback to default data if API fails
+    console.log('Using fallback data');
     return { playersData: DEFAULT_PLAYERS, preSurveyData: [] };
   }
 };
@@ -57,7 +74,7 @@ export default function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      const { playersData, preSurveyData: preData } = await loadSampleData();
+      const { playersData, preSurveyData: preData } = await loadGoogleSheetsData();
       setPlayers(playersData);
       setPreSurveyData(preData);
       setDataLoaded(true);
@@ -72,7 +89,15 @@ export default function App() {
   }, [players, nameQuery, dataLoaded]);
 
   const selectedPre = useMemo(
-    () => preSurveyData.find((p) => p.name.toLowerCase() === selectedPlayer.toLowerCase()),
+    () => {
+      const found = preSurveyData.find((p) => p.name.toLowerCase() === selectedPlayer.toLowerCase());
+      console.log('Checking pre-survey data:', {
+        selectedPlayer,
+        availableNames: preSurveyData.map(p => p.name),
+        found: found ? found.name : null
+      });
+      return found;
+    },
     [preSurveyData, selectedPlayer]
   );
 
@@ -574,6 +599,10 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
         position: relative;
       `;
       
+      // Calculate WEMWBS score (assuming mentalWellnessChange is the score)
+      const wemwbsScore = report.mentalWellnessChange;
+      const wemwbsLevel = wemwbsScore >= 70 ? 'Excellent' : wemwbsScore >= 60 ? 'Good' : wemwbsScore >= 50 ? 'Average' : 'Needs Improvement';
+      
       // Build the report content manually
       const reportHTML = `
         <div style="text-align: center; margin-bottom: 24px;">
@@ -593,9 +622,10 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             <p style="color: #6366f1; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">SOCIAL</p>
             <p style="color: #6366f1; font-size: 24px; font-weight: 800; margin: 0;">${report.socialConfidence}%</p>
           </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #00f4e3;">
-            <p style="color: #00f4e3; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">MENTAL WELLNESS</p>
-            <p style="color: #00f4e3; font-size: 24px; font-weight: 800; margin: 0;">${report.mentalWellnessChange}%</p>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #9333ea;">
+            <p style="color: #9333ea; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">WEMWBS SCORE</p>
+            <p style="color: #9333ea; font-size: 24px; font-weight: 800; margin: 0;">${wemwbsScore}</p>
+            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${wemwbsLevel}</p>
           </div>
         </div>
         <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
@@ -606,8 +636,15 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
           <p style="color: #ffffff; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">💡 SUGGESTED NEXT STEPS</p>
           ${report.suggestions.map(suggestion => `<p style="color: #e0e0e0; font-size: 14px; margin: 0 0 4px 0;">• ${suggestion}</p>`).join('')}
         </div>
+        <div style="background-color: #1f2937; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #444;">
+          <p style="color: #ffffff; font-size: 14px; font-weight: 700; margin: 0 0 8px 0;">📊 ASSESSMENT METHODOLOGY</p>
+          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">This report has been computed using the Warwick–Edinburgh Mental Well-being Scale (WEMWBS).</p>
+          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">WEMWBS is a validated 14-item scale measuring mental well-being and psychological functioning.</p>
+          <p style="color: #e0e0e0; font-size: 12px; margin: 0;">Score Range: 14-70 (Higher scores indicate better mental well-being)</p>
+        </div>
         <div style="text-align: center; padding-top: 16px; border-top: 1px solid #444; margin-top: 16px;">
           <p style="color: #00f4e3; font-size: 12px; margin: 0;">Generated on ${new Date().toLocaleDateString()}</p>
+          <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">Powered by WEMWBS Assessment</p>
         </div>
       `;
       
@@ -691,9 +728,12 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#6366f1' }}>Social</p>
             <p className="text-2xl font-black text-tertiary" style={{ color: '#6366f1' }}>{report.socialConfidence}%</p>
           </div>
-          <div className="glass-card p-4 rounded-lg border-l-2 border-primary">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#00f4e3' }}>Mental Wellness</p>
-            <p className="text-2xl font-black text-primary" style={{ color: '#00f4e3' }}>{report.mentalWellnessChange}%</p>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-purple-600">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#9333ea' }}>WEMWBS Score</p>
+            <p className="text-2xl font-black" style={{ color: '#9333ea' }}>{report.mentalWellnessChange}</p>
+            <p className="text-xs text-on-surface-variant mt-1" style={{ color: '#e0e0e0' }}>
+              {report.mentalWellnessChange >= 70 ? 'Excellent' : report.mentalWellnessChange >= 60 ? 'Good' : report.mentalWellnessChange >= 50 ? 'Average' : 'Needs Improvement'}
+            </p>
           </div>
         </div>
 
@@ -711,8 +751,23 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
           </p>
           {report.suggestions.map((item) => <p className="text-sm text-on-surface-variant mb-1" style={{ color: '#e0e0e0' }} key={item}>• {item}</p>)}
         </div>
+        <div className="glass-card p-4 rounded-lg mb-4 bg-surface-container-high" style={{ backgroundColor: '#1f2937', border: '1px solid #444' }}>
+          <p className="font-bold mb-3 text-on-surface flex items-center gap-2" style={{ color: '#ffffff' }}>
+            📊 Assessment Methodology
+          </p>
+          <p className="text-sm text-on-surface-variant mb-2" style={{ color: '#e0e0e0' }}>
+            This report has been computed using the Warwick–Edinburgh Mental Well-being Scale (WEMWBS).
+          </p>
+          <p className="text-sm text-on-surface-variant mb-2" style={{ color: '#e0e0e0' }}>
+            WEMWBS is a validated 14-item scale measuring mental well-being and psychological functioning.
+          </p>
+          <p className="text-sm text-on-surface-variant" style={{ color: '#e0e0e0' }}>
+            Score Range: 14-70 (Higher scores indicate better mental well-being)
+          </p>
+        </div>
         <div className="text-center text-xs text-on-surface-variant mt-4 pt-4 border-t border-outline-variant/20" style={{ color: '#00f4e3', borderTopColor: '#444' }}>
           Generated on {new Date().toLocaleDateString()}
+          <p className="text-xs mt-1" style={{ color: '#e0e0e0' }}>Powered by WEMWBS Assessment</p>
         </div>
       </div>
 
