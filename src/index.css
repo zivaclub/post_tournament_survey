@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-manrope: "Manrope", sans-serif;
+  
+  --color-background: #001111;
+  --color-surface: #001111;
+  --color-surface-variant: #002b2b;
+  --color-surface-container: #001e1e;
+  --color-surface-container-low: #001717;
+  --color-surface-container-high: #002424;
+  --color-surface-container-highest: #002b2b;
+  
+  --color-primary: #50f4e3;
+  --color-primary-container: #05d2c2;
+  --color-on-primary: #005851;
+  
+  --color-secondary: #2efd7c;
+  --color-secondary-container: #006d2f;
+  
+  --color-tertiary: #f3ffca;
+  --color-on-surface: #baf6f5;
+  --color-on-surface-variant: #7bb5b5;
+  
+  --color-outline: #457f7f;
+  --color-outline-variant: #0d5051;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-manrope;
+  }
+}
+
+.kinetic-glow {
+  box-shadow: 0 0 20px rgba(80, 244, 227, 0.15);
+}
+
+.mesh-gradient {
+  background: radial-gradient(at 0% 0%, rgba(80, 244, 227, 0.1) 0%, transparent 50%),
+              radial-gradient(at 100% 100%, rgba(46, 253, 124, 0.05) 0%, transparent 50%);
+}
+
+.glass-card {
+  background: rgba(0, 36, 36, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(13, 80, 81, 0.2);
+}
