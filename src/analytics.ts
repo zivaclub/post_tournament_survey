@@ -1,10 +1,6 @@
 import { WEMWBS7Score, MentalGrowth, AnalyticsMetrics, PreSurveyRecord } from './types';
 
 export const calculateWEMWBS7 = (answers: Record<number, number | string> | Record<string, number | string>): WEMWBS7Score => {
-  console.log("=== WEMWBS7 CALCULATION DEBUG ===");
-  console.log("Input answers:", answers);
-  console.log("Input answers keys:", Object.keys(answers));
-  
   const rawScore = [1, 2, 3, 4, 5, 6, 7].reduce((sum, id) => {
     // Try both numeric key (1) and string key (q1)
     let value = answers[id]; // numeric key
@@ -13,23 +9,16 @@ export const calculateWEMWBS7 = (answers: Record<number, number | string> | Reco
     }
     
     const numericValue = typeof value === 'number' ? value : Number(value) || 0;
-    console.log(`  Q${id}: checked keys [${id}, 'q${id}'] -> found: ${value} -> ${numericValue} (type: ${typeof value})`);
     return sum + numericValue;
   }, 0);
   
   const standardizedScore = Math.round(((rawScore - 7) / 28) * 100);
-  
-  console.log("Raw score:", rawScore);
-  console.log("Standardized score:", standardizedScore);
   
   let label: 'Low' | 'Moderate' | 'Healthy' | 'High';
   if (standardizedScore <= 25) label = 'Low';
   else if (standardizedScore <= 50) label = 'Moderate';
   else if (standardizedScore <= 75) label = 'Healthy';
   else label = 'High';
-  
-  console.log("Label:", label);
-  console.log("=== END WEMWBS7 DEBUG ===");
   
   return { rawScore, standardizedScore, label };
 };
@@ -155,17 +144,9 @@ export const calculateAnalytics = (
   postAnswers: Record<number, number | string>,
   preSurvey?: PreSurveyRecord
 ): AnalyticsMetrics => {
-  console.log("=== MAIN ANALYTICS DEBUG ===");
-  console.log("PreSurvey parameter:", preSurvey);
-  console.log("PreSurvey answers:", preSurvey?.answers);
-  console.log("PreSurvey answers keys:", preSurvey?.answers ? Object.keys(preSurvey.answers) : 'none');
-  
   const preAnswers = preSurvey?.answers || {};
-  console.log("Extracted preAnswers:", preAnswers);
   
-  console.log("Calculating Pre WEMWBS-7...");
   const preWEMWBS7 = calculateWEMWBS7(preAnswers);
-  console.log("Calculating Post WEMWBS-7...");
   const postWEMWBS7 = calculateWEMWBS7(postAnswers);
   const mentalGrowth = calculateMentalGrowth(postWEMWBS7.standardizedScore, preWEMWBS7.standardizedScore);
   const confidenceIndex = calculateConfidenceIndex(postAnswers);

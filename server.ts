@@ -174,6 +174,111 @@ app.get("/api/pre-survey", async (req, res) => {
   }
 });
 
+// Post-survey data endpoint
+app.post("/api/post-survey", async (req, res) => {
+  console.log("Post-survey API called with method:", req.method);
+  
+  const {
+    player_name,
+    timestamp,
+    answers,
+  } = req.body || {};
+
+  if (!player_name || !answers) {
+    return res.status(400).json({ error: "Invalid request payload" });
+  }
+
+  try {
+    console.log("Processing post-survey submission...");
+    
+    // Create row with Date, Name, Q1, Q2, Q3, etc.
+    const row = [
+      timestamp || new Date().toISOString(),
+      player_name,
+    ];
+    
+    // Add answers Q1-Q18
+    for (let i = 1; i <= 18; i++) {
+      row.push(answers[i] || "");
+    }
+
+    console.log("Appending data to post-survey sheet:", GOOGLE_SHEET_ID);
+    
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: GOOGLE_SHEET_ID,
+      range: "Sheet1!A:U", // A=Date, B=Name, C-U=Q1-Q18
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [row] },
+    });
+
+    console.log("Post-survey data appended successfully");
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error("Post-survey API error:", error);
+    return res.status(500).json({
+      error: "Failed to submit post-survey data to Google Sheets",
+      details: error?.message || "Unknown error",
+    });
+  }
+});
+
+// Analytics data endpoint
+app.post("/api/analytics", async (req, res) => {
+  const {
+    player_name,
+    timestamp,
+    pre_wemwbs7_score,
+    post_wemwbs7_score,
+    mental_growth,
+    confidence_index,
+    physical_index,
+    social_index,
+    retention_index,
+    tournament_impact_score,
+    mental_growth_label,
+    pre_wemwbs7_label,
+    post_wemwbs7_label,
+  } = req.body || {};
+
+  if (!player_name) {
+    return res.status(400).json({ error: "Invalid request payload" });
+  }
+
+  try {
+    // Create row with analytics data
+    const row = [
+      timestamp || new Date().toISOString(),
+      player_name,
+      pre_wemwbs7_score || 0,
+      post_wemwbs7_score || 0,
+      mental_growth || 0,
+      confidence_index || 0,
+      physical_index || 0,
+      social_index || 0,
+      retention_index || 0,
+      tournament_impact_score || 0,
+      mental_growth_label || '',
+      pre_wemwbs7_label || '',
+      post_wemwbs7_label || '',
+    ];
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: STATS_SHEET_ID,
+      range: "Sheet1!A:M",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [row] },
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error("Analytics API error:", error);
+    return res.status(500).json({
+      error: "Failed to submit analytics data to Google Sheets",
+      details: error?.message || "Unknown error",
+    });
+  }
+});
+
 async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "prod") {

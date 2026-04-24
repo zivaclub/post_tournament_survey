@@ -142,40 +142,6 @@ export default function App() {
     finalAnswers: Record<number, AnswerValue>,
     preMatch?: PreSurveyRecord
   ): ComputedReport => {
-    // === PRE-SURVEY DATA LOGGING ===
-    console.log("=== PRE-SURVEY DATA DEBUG ===");
-    console.log("PreMatch object:", preMatch);
-    console.log("PreMatch name:", preMatch?.name);
-    console.log("PreMatch answers:", preMatch?.answers);
-    
-    if (preMatch?.answers) {
-      console.log("Pre-survey Q1-Q7 values:");
-      for (let i = 1; i <= 7; i++) {
-        const answer = preMatch.answers[`q${i}`];
-        console.log(`  Q${i}:`, answer, `(type: ${typeof answer})`);
-      }
-      
-      // Calculate what the raw score should be
-      const preRawScore = [1, 2, 3, 4, 5, 6, 7].reduce((sum, id) => {
-        const answer = preMatch.answers[`q${id}`];
-        const numericAnswer = typeof answer === 'number' ? answer : Number(answer) || 0;
-        console.log(`  Q${id} contribution: ${numericAnswer}`);
-        return sum + numericAnswer;
-      }, 0);
-      console.log("Expected pre-survey raw score:", preRawScore);
-    } else {
-      console.log("NO PRE-SURVEY DATA FOUND");
-    }
-    
-    // === POST-SURVEY DATA LOGGING ===
-    console.log("=== POST-SURVEY DATA DEBUG ===");
-    console.log("Final answers:", finalAnswers);
-    console.log("Post-survey Q1-Q7 values:");
-    for (let i = 1; i <= 7; i++) {
-      const answer = finalAnswers[i];
-      console.log(`  Q${i}:`, answer, `(type: ${typeof answer})`);
-    }
-
     // Convert answers to proper format (preserve strings for Q17, Q18)
     const processedAnswers = Object.keys(finalAnswers).reduce((acc, key) => {
       const questionId = Number(key);
@@ -190,34 +156,39 @@ export default function App() {
       return acc;
     }, {} as Record<number, number | string>);
 
-    console.log("Processed answers for analytics:", processedAnswers);
-
     const analytics = calculateAnalytics(processedAnswers, preMatch);
-    
-    // === ANALYTICS RESULTS LOGGING ===
-    console.log("=== ANALYTICS RESULTS DEBUG ===");
-    console.log("Pre WEMWBS-7:", analytics.preWEMWBS7);
-    console.log("Post WEMWBS-7:", analytics.postWEMWBS7);
-    console.log("Mental Growth:", analytics.mentalGrowth);
-    
     const strengths = generateStrengths(analytics);
     const suggestions = generateSuggestions(analytics);
-
-    console.log("=== END DEBUG ===");
 
     return { analytics, strengths, suggestions };
   };
 
   const submitToGoogleSheets = async (payload: PostSurveySubmission) => {
     try {
-      // Submit basic survey data
-      await fetch("/api/submit", {
+      console.log("Submitting data for:", payload.player_name);
+      
+      // Submit post-survey answers to separate sheet
+      const surveyPayload = {
+        player_name: payload.player_name,
+        timestamp: payload.timestamp,
+        answers: payload.answers,
+      };
+      
+      console.log("Submitting post-survey data...");
+      const surveyResponse = await fetch("/api/post-survey", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(surveyPayload),
       });
       
-      // Submit detailed analytics data
+      if (!surveyResponse.ok) {
+        const errorData = await surveyResponse.json();
+        console.error("Post-survey submission failed:", errorData);
+        throw new Error(`Post-survey submission failed: ${errorData.error}`);
+      }
+      console.log("Post-survey data submitted successfully");
+      
+      // Submit detailed analytics data to separate sheet
       const analyticsPayload = {
         player_name: payload.player_name,
         timestamp: payload.timestamp,
@@ -234,14 +205,23 @@ export default function App() {
         post_wemwbs7_label: payload.computed_report.analytics.postWEMWBS7.label,
       };
       
-      await fetch("/api/analytics", {
+      console.log("Submitting analytics data...");
+      const analyticsResponse = await fetch("/api/analytics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(analyticsPayload),
       });
       
+      if (!analyticsResponse.ok) {
+        const errorData = await analyticsResponse.json();
+        console.error("Analytics submission failed:", errorData);
+        throw new Error(`Analytics submission failed: ${errorData.error}`);
+      }
+      console.log("Analytics data submitted successfully");
+      
     } catch (error) {
       console.error("Submission error:", error);
+      alert(`Failed to submit data: ${error.message}. Please try again.`);
     }
   };
 
@@ -252,15 +232,6 @@ export default function App() {
     }
 
     setIsSubmitting(true);
-    
-    // === SUBMISSION DEBUG LOGGING ===
-    console.log("=== SUBMISSION DEBUG ===");
-    console.log("Selected player:", selectedPlayer);
-    console.log("selectedPre value:", selectedPre);
-    console.log("selectedPre type:", typeof selectedPre);
-    console.log("Answers being submitted:", answers);
-    console.log("=== END SUBMISSION DEBUG ===");
-    
     const computed = computeReport(answers, selectedPre);
     const submission: PostSurveySubmission = {
       player_name: selectedPlayer,
@@ -647,118 +618,230 @@ function SurveyPage({
 function CompletionPage({ name, report, onReset }: { name: string; report: ComputedReport; onReset: () => void }) {
   const handleDownload = async () => {
     try {
-      // Import html2canvas dynamically
-      const html2canvas = (await import('html2canvas')).default;
-      const element = document.getElementById('report-content');
-      
-      if (!element) {
-        console.error('Report element not found');
-        alert('Report content not found. Please try again.');
-        return;
-      }
-
       console.log('Starting download process...');
       
       // Wait a bit for any pending renders
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Create a new clean element instead of cloning
-      const cleanElement = document.createElement('div');
-      cleanElement.id = 'report-content-clean';
-      cleanElement.style.cssText = `
+      // Get the actual report content from the DOM
+      const reportElement = document.getElementById('report-content');
+      if (!reportElement) {
+        throw new Error('Report content element not found');
+      }
+      
+      // Clone the report element to avoid modifying the original
+      const clonedElement = reportElement.cloneNode(true) as HTMLElement;
+      clonedElement.id = 'report-content-cloned';
+      
+      // Style the cloned element for download
+      clonedElement.style.cssText = `
         background-color: #1a1a1a;
         color: #ffffff;
         padding: 24px;
         border-radius: 12px;
         font-family: system-ui, -apple-system, sans-serif;
-        min-height: 700px;
-        width: 600px;
+        min-height: 1200px;
+        width: 700px;
         position: relative;
+        overflow: visible;
       `;
       
-      const { analytics } = report;
+      // Temporarily add the cloned element to the DOM
+      clonedElement.style.position = 'absolute';
+      clonedElement.style.left = '-9999px';
+      clonedElement.style.top = '-9999px';
+      document.body.appendChild(clonedElement);
       
-      // Build the report content manually
-      const reportHTML = `
-        <div style="text-align: center; margin-bottom: 24px;">
-          <h2 style="color: #ffffff; font-size: 24px; font-weight: 800; margin-bottom: 8px;">${name}</h2>
-          <p style="color: #00f4e3; font-size: 18px; font-weight: 700;">Ziva Tournament Analytics Report</p>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #00f4e3;">
-            <p style="color: #00f4e3; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">PRE WEMWBS-7</p>
-            <p style="color: #00f4e3; font-size: 24px; font-weight: 800; margin: 0;">${analytics.preWEMWBS7.standardizedScore}</p>
-            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${analytics.preWEMWBS7.label}</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #2efd7c;">
-            <p style="color: #2efd7c; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">POST WEMWBS-7</p>
-            <p style="color: #2efd7c; font-size: 24px; font-weight: 800; margin: 0;">${analytics.postWEMWBS7.standardizedScore}</p>
-            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${analytics.postWEMWBS7.label}</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #6366f1;">
-            <p style="color: #6366f1; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">MENTAL GROWTH</p>
-            <p style="color: #6366f1; font-size: 24px; font-weight: 800; margin: 0;">${analytics.mentalGrowth.score > 0 ? '+' : ''}${analytics.mentalGrowth.score}</p>
-            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${analytics.mentalGrowth.label}</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #f59e0b;">
-            <p style="color: #f59e0b; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">CONFIDENCE INDEX</p>
-            <p style="color: #f59e0b; font-size: 24px; font-weight: 800; margin: 0;">${analytics.confidenceIndex}%</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #ef4444;">
-            <p style="color: #ef4444; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">PHYSICAL INDEX</p>
-            <p style="color: #ef4444; font-size: 24px; font-weight: 800; margin: 0;">${analytics.physicalIndex}%</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #8b5cf6;">
-            <p style="color: #8b5cf6; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">SOCIAL INDEX</p>
-            <p style="color: #8b5cf6; font-size: 24px; font-weight: 800; margin: 0;">${analytics.socialIndex}%</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #06b6d4;">
-            <p style="color: #06b6d4; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">RETENTION INDEX</p>
-            <p style="color: #06b6d4; font-size: 24px; font-weight: 800; margin: 0;">${analytics.retentionIndex}%</p>
-          </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #10b981;">
-            <p style="color: #10b981; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">TOURNAMENT IMPACT</p>
-            <p style="color: #10b981; font-size: 24px; font-weight: 800; margin: 0;">${analytics.tournamentImpactScore}%</p>
-          </div>
-        </div>
-        <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-          <p style="color: #ffffff; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🏆 STRENGTHS</p>
-          ${report.strengths.map(strength => `<p style="color: #e0e0e0; font-size: 14px; margin: 0 0 4px 0;">• ${strength}</p>`).join('')}
-        </div>
-        <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-          <p style="color: #ffffff; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">💡 SUGGESTED NEXT STEPS</p>
-          ${report.suggestions.map(suggestion => `<p style="color: #e0e0e0; font-size: 14px; margin: 0 0 4px 0;">• ${suggestion}</p>`).join('')}
-        </div>
-        <div style="background-color: #1f2937; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #444;">
-          <p style="color: #ffffff; font-size: 14px; font-weight: 700; margin: 0 0 8px 0;">📊 ASSESSMENT METHODOLOGY</p>
-          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">This report uses WEMWBS-7 for mental wellbeing assessment.</p>
-          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">Tournament Impact Score is weighted across multiple development indices.</p>
-          <p style="color: #e0e0e0; font-size: 12px; margin: 0;">All scores are normalized to 0-100 scale for comparison.</p>
-        </div>
-        <div style="text-align: center; padding-top: 16px; border-top: 1px solid #444; margin-top: 16px;">
-          <p style="color: #00f4e3; font-size: 12px; margin: 0;">Generated on ${new Date().toLocaleDateString()}</p>
-          <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">Powered by Ziva Analytics</p>
-        </div>
-      `;
+      // Import html2canvas dynamically
+      const html2canvas = (await import('html2canvas')).default;
+      const element = clonedElement;
       
-      cleanElement.innerHTML = reportHTML;
-      
-      // Temporarily add the clean element to the DOM
-      cleanElement.style.position = 'absolute';
-      cleanElement.style.left = '-9999px';
-      cleanElement.style.top = '-9999px';
-      document.body.appendChild(cleanElement);
-      
+            
       try {
-        // Capture the clean element
-        const canvas = await html2canvas(cleanElement, {
+        // Filter out unsupported CSS properties before capture
+        const filterUnsupportedCSS = (element: HTMLElement) => {
+          const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_ELEMENT
+          );
+          
+          const unsupportedFunctions = ['oklab', 'oklch', 'color-mix', 'lab', 'lch'];
+          
+          let currentNode;
+          while (currentNode = walker.nextNode() as HTMLElement) {
+            if (currentNode.style) {
+              const style = currentNode.style;
+              const computedStyle = window.getComputedStyle(currentNode);
+              
+              // Replace ALL inline styles that contain unsupported color functions
+              for (let i = style.length - 1; i >= 0; i--) {
+                const propertyName = style[i];
+                const propertyValue = style.getPropertyValue(propertyName);
+                
+                if (propertyValue) {
+                  let hasUnsupported = false;
+                  for (const func of unsupportedFunctions) {
+                    if (propertyValue.includes(func)) {
+                      hasUnsupported = true;
+                      break;
+                    }
+                  }
+                  
+                  if (hasUnsupported) {
+                    // Remove the problematic property entirely
+                    style.removeProperty(propertyName);
+                  }
+                }
+              }
+              
+              // Check and replace computed styles
+              ['color', 'backgroundColor', 'borderColor', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderRightColor'].forEach(prop => {
+                const computedValue = computedStyle.getPropertyValue(prop);
+                if (computedValue) {
+                  let hasUnsupported = false;
+                  for (const func of unsupportedFunctions) {
+                    if (computedValue.includes(func)) {
+                      hasUnsupported = true;
+                      break;
+                    }
+                  }
+                  if (hasUnsupported) {
+                    // Replace with safe hex colors
+                    if (prop.includes('background')) {
+                      style.setProperty(prop, '#1a1a1a');
+                    } else if (prop.includes('border')) {
+                      style.setProperty(prop, '#444444');
+                    } else {
+                      style.setProperty(prop, '#ffffff');
+                    }
+                  }
+                }
+              });
+              
+              // Remove problematic CSS properties completely
+              style.removeProperty('backdrop-filter');
+              style.removeProperty('filter');
+              style.removeProperty('mix-blend-mode');
+              style.removeProperty('isolation');
+              style.removeProperty('background-blend-mode');
+            }
+          }
+        };
+
+        // Aggressively replace all oklab colors in the entire DOM tree
+        const replaceOklabColors = (element: HTMLElement) => {
+          const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_ELEMENT
+          );
+          
+          let currentNode;
+          while (currentNode = walker.nextNode() as HTMLElement) {
+            // Get the element's style attribute
+            const styleAttr = currentNode.getAttribute('style');
+            if (styleAttr) {
+              // Replace oklab functions with safe hex colors
+              let newStyle = styleAttr;
+              newStyle = newStyle.replace(/oklab\([^)]*\)/g, '#ffffff');
+              newStyle = newStyle.replace(/oklch\([^)]*\)/g, '#ffffff');
+              newStyle = newStyle.replace(/color-mix\([^)]*\)/g, '#ffffff');
+              newStyle = newStyle.replace(/lab\([^)]*\)/g, '#ffffff');
+              newStyle = newStyle.replace(/lch\([^)]*\)/g, '#ffffff');
+              
+              // Also replace background-specific oklab colors
+              newStyle = newStyle.replace(/background[^:]*:.*oklab\([^)]*\)/g, 'background-color: #1a1a1a');
+              newStyle = newStyle.replace(/background[^:]*:.*oklch\([^)]*\)/g, 'background-color: #1a1a1a');
+              
+              currentNode.setAttribute('style', newStyle);
+            }
+          }
+        };
+        
+        // Apply aggressive oklab color replacement
+        replaceOklabColors(clonedElement);
+        filterUnsupportedCSS(clonedElement);
+        
+        // Add a targeted CSS override to prevent oklab colors while preserving other styles
+        const styleOverride = document.createElement('style');
+        styleOverride.textContent = `
+          [style*="oklab"], [style*="oklch"], [style*="color-mix"], [style*="lab"], [style*="lch"] {
+            color: #ffffff !important;
+            background-color: #1a1a1a !important;
+            border-color: #444444 !important;
+          }
+          * {
+            backdrop-filter: none !important;
+            filter: none !important;
+            mix-blend-mode: normal !important;
+            background-blend-mode: normal !important;
+          }
+        `;
+        clonedElement.appendChild(styleOverride);
+        
+        // Capture the cloned element with proper dimensions
+        const canvas = await html2canvas(clonedElement, {
           backgroundColor: '#1a1a1a',
           scale: 2,
           useCORS: true,
           allowTaint: true,
           logging: false,
-          width: 600,
-          height: 900,
+          width: 700,
+          height: 1200,
+          windowWidth: 700,
+          windowHeight: 1200,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDoc) => {
+            // Add aggressive style override to the cloned document
+            const globalStyle = clonedDoc.createElement('style');
+            globalStyle.textContent = `
+              * {
+                backdrop-filter: none !important;
+                filter: none !important;
+                mix-blend-mode: normal !important;
+                background-blend-mode: normal !important;
+              }
+              [style*="oklab"], [style*="oklch"], [style*="color-mix"], [style*="lab"], [style*="lch"] {
+                color: #ffffff !important;
+                background-color: #1a1a1a !important;
+                border-color: #444444 !important;
+              }
+              /* Replace any remaining oklab references */
+              * { color: #ffffff !important; }
+              * { background-color: #1a1a1a !important; }
+              * { border-color: #444444 !important; }
+            `;
+            clonedDoc.head.appendChild(globalStyle);
+            
+            // Apply aggressive replacement to cloned document
+            const clonedElementInDoc = clonedDoc.getElementById('report-content-cloned');
+            if (clonedElementInDoc) {
+              // Apply the same aggressive replacement to the cloned document
+              const replaceOklabInDoc = (element: HTMLElement) => {
+                const walker = clonedDoc.createTreeWalker(
+                  element,
+                  NodeFilter.SHOW_ELEMENT
+                );
+                
+                let currentNode;
+                while (currentNode = walker.nextNode() as HTMLElement) {
+                  const styleAttr = currentNode.getAttribute('style');
+                  if (styleAttr) {
+                    let newStyle = styleAttr;
+                    newStyle = newStyle.replace(/oklab\([^)]*\)/g, '#ffffff');
+                    newStyle = newStyle.replace(/oklch\([^)]*\)/g, '#ffffff');
+                    newStyle = newStyle.replace(/color-mix\([^)]*\)/g, '#ffffff');
+                    newStyle = newStyle.replace(/lab\([^)]*\)/g, '#ffffff');
+                    newStyle = newStyle.replace(/lch\([^)]*\)/g, '#ffffff');
+                    currentNode.setAttribute('style', newStyle);
+                  }
+                }
+              };
+              
+              replaceOklabInDoc(clonedElementInDoc);
+              filterUnsupportedCSS(clonedElementInDoc);
+            }
+          }
         });
         
         console.log('Canvas created successfully');
@@ -769,7 +852,7 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${name.replace(/\s+/g, '_')}_analytics_report.png`;
+            link.download = `${name.replace(/\s+/g, '_')}_Ziva_Report_${new Date().toISOString().split('T')[0]}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -777,14 +860,16 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             console.log('Download completed successfully');
           } else {
             console.error('Failed to create blob from canvas');
-            alert('Failed to generate image. Please try again.');
+            alert('Failed to generate report image. Please try again.');
           }
         }, 'image/png');
+        
       } finally {
-        // Remove the clean element
-        document.body.removeChild(cleanElement);
+        // Clean up
+        if (clonedElement && clonedElement.parentNode) {
+          clonedElement.parentNode.removeChild(clonedElement);
+        }
       }
-      
     } catch (error) {
       console.error('Error downloading report:', error);
       alert(`Failed to download report: ${error.message || 'Unknown error'}. Please try again.`);
@@ -795,8 +880,8 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
     <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex-1 flex flex-col px-6 pt-8 pb-24">
       <div className="relative mb-8 self-center">
         <div className="absolute -inset-4 bg-secondary/20 rounded-full blur-xl" />
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center shadow-[0_0_30px_rgba(46,253,124,0.4)]">
-          <CheckCircle className="text-on-primary w-12 h-12" />
+        <div className="w-24 h-24 rounded-full border-4 border-gradient-to-r from-secondary to-primary flex items-center justify-center shadow-[0_0_30px_rgba(46,253,124,0.4)] p-2" style={{ borderColor: '#00f4e3', borderWidth: '3px' }}>
+          <img src="/logo.svg" alt="Ziva Logo" className="w-full h-full object-contain" />
         </div>
       </div>
 
@@ -827,19 +912,19 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             <p className="text-xs text-on-surface-variant mt-1" style={{ color: '#e0e0e0' }}>{report.analytics.mentalGrowth.label}</p>
           </div>
           <div className="glass-card p-4 rounded-lg border-l-2 border-amber-500">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#f59e0b' }}>Confidence Index</p>
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#f59e0b' }}>CONFIDENCE SCORE</p>
             <p className="text-2xl font-black" style={{ color: '#f59e0b' }}>{report.analytics.confidenceIndex}%</p>
           </div>
           <div className="glass-card p-4 rounded-lg border-l-2 border-red-500">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#ef4444' }}>Physical Index</p>
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#ef4444' }}>PHYSICAL SCORE</p>
             <p className="text-2xl font-black" style={{ color: '#ef4444' }}>{report.analytics.physicalIndex}%</p>
           </div>
           <div className="glass-card p-4 rounded-lg border-l-2 border-purple-500">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#8b5cf6' }}>Social Index</p>
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#8b5cf6' }}>SOCIAL SCORE</p>
             <p className="text-2xl font-black" style={{ color: '#8b5cf6' }}>{report.analytics.socialIndex}%</p>
           </div>
           <div className="glass-card p-4 rounded-lg border-l-2 border-cyan-500">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#06b6d4' }}>Retention Index</p>
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#06b6d4' }}>RETENTION SCORE</p>
             <p className="text-2xl font-black" style={{ color: '#06b6d4' }}>{report.analytics.retentionIndex}%</p>
           </div>
           <div className="glass-card p-4 rounded-lg border-l-2 border-green-500">
