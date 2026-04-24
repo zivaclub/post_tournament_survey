@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle, Lightbulb, Timer, Award, BarChart3, Download } from "lucide-react";
+import { CheckCircle, Lightbulb, Timer, Award, BarChart3, Download, TrendingUp, Users, Target, Heart } from "lucide-react";
 import { QUESTIONS } from "./constants";
 import {
   AnswerValue,
@@ -10,7 +10,9 @@ import {
   PostSurveySubmission,
   PreSurveyRecord,
   Question,
+  CohortAnalytics,
 } from "./types";
+import { calculateAnalytics, generateStrengths, generateSuggestions } from "./analytics";
 import logo from "./logo.svg";
 
 const STORAGE_KEY = "ziva-post-survey-submissions";
@@ -140,38 +142,104 @@ export default function App() {
     finalAnswers: Record<number, AnswerValue>,
     preMatch?: PreSurveyRecord
   ): ComputedReport => {
-    const num = (id: number) => Number(finalAnswers[id] || 0);
-    const pre = (id: number) => Number(preMatch?.answers?.[`q${id}`] ?? 0);
+    // === PRE-SURVEY DATA LOGGING ===
+    console.log("=== PRE-SURVEY DATA DEBUG ===");
+    console.log("PreMatch object:", preMatch);
+    console.log("PreMatch name:", preMatch?.name);
+    console.log("PreMatch answers:", preMatch?.answers);
+    
+    if (preMatch?.answers) {
+      console.log("Pre-survey Q1-Q7 values:");
+      for (let i = 1; i <= 7; i++) {
+        const answer = preMatch.answers[`q${i}`];
+        console.log(`  Q${i}:`, answer, `(type: ${typeof answer})`);
+      }
+      
+      // Calculate what the raw score should be
+      const preRawScore = [1, 2, 3, 4, 5, 6, 7].reduce((sum, id) => {
+        const answer = preMatch.answers[`q${id}`];
+        const numericAnswer = typeof answer === 'number' ? answer : Number(answer) || 0;
+        console.log(`  Q${id} contribution: ${numericAnswer}`);
+        return sum + numericAnswer;
+      }, 0);
+      console.log("Expected pre-survey raw score:", preRawScore);
+    } else {
+      console.log("NO PRE-SURVEY DATA FOUND");
+    }
+    
+    // === POST-SURVEY DATA LOGGING ===
+    console.log("=== POST-SURVEY DATA DEBUG ===");
+    console.log("Final answers:", finalAnswers);
+    console.log("Post-survey Q1-Q7 values:");
+    for (let i = 1; i <= 7; i++) {
+      const answer = finalAnswers[i];
+      console.log(`  Q${i}:`, answer, `(type: ${typeof answer})`);
+    }
 
-    const confidenceScore = Math.round(((num(9) - 2) * 15 + (num(10) - 3) * 10 + (num(8) - 5) * 4));
-    const energyScore = Math.round(((num(11) + num(12)) / 10) * 100 - 50);
-    const socialConfidence = Math.round(((num(13) + num(14)) / 8) * 100 - 25);
+    // Convert answers to proper format (preserve strings for Q17, Q18)
+    const processedAnswers = Object.keys(finalAnswers).reduce((acc, key) => {
+      const questionId = Number(key);
+      const value = finalAnswers[questionId];
+      
+      // Keep string answers for questions 17 and 18, convert others to numbers
+      if (questionId === 17 || questionId === 18) {
+        acc[questionId] = value;
+      } else {
+        acc[questionId] = Number(value);
+      }
+      return acc;
+    }, {} as Record<number, number | string>);
 
-    const preMentalAvg = preMatch ? [1, 2, 3, 4, 5, 6, 7].reduce((sum, id) => sum + pre(id), 0) / 7 : 0;
-    const postMentalAvg = [1, 2, 3, 4, 5, 6, 7].reduce((sum, id) => sum + num(id), 0) / 7;
-    const mentalWellnessChange = preMatch ? Math.round(((postMentalAvg - preMentalAvg) / Math.max(preMentalAvg, 1)) * 100) : 0;
+    console.log("Processed answers for analytics:", processedAnswers);
 
-    const strengths: string[] = [];
-    if (confidenceScore > 10) strengths.push("Competitive mindset improved");
-    if (energyScore > 10) strengths.push("Better physical motivation");
-    if (socialConfidence > 10) strengths.push("Stronger social confidence");
-    if (strengths.length === 0) strengths.push("Consistent participation and effort");
+    const analytics = calculateAnalytics(processedAnswers, preMatch);
+    
+    // === ANALYTICS RESULTS LOGGING ===
+    console.log("=== ANALYTICS RESULTS DEBUG ===");
+    console.log("Pre WEMWBS-7:", analytics.preWEMWBS7);
+    console.log("Post WEMWBS-7:", analytics.postWEMWBS7);
+    console.log("Mental Growth:", analytics.mentalGrowth);
+    
+    const strengths = generateStrengths(analytics);
+    const suggestions = generateSuggestions(analytics);
 
-    const participationIntent = String(finalAnswers[17] || "");
-    const suggestions = participationIntent === "Yes"
-      ? ["Join advanced cricket league", "Continue weekly participation"]
-      : ["Keep training with weekly sessions", "Review personal performance trends"];
+    console.log("=== END DEBUG ===");
 
-    return { confidenceScore, energyScore, socialConfidence, mentalWellnessChange, strengths, suggestions };
+    return { analytics, strengths, suggestions };
   };
 
   const submitToGoogleSheets = async (payload: PostSurveySubmission) => {
     try {
+      // Submit basic survey data
       await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      
+      // Submit detailed analytics data
+      const analyticsPayload = {
+        player_name: payload.player_name,
+        timestamp: payload.timestamp,
+        pre_wemwbs7_score: payload.computed_report.analytics.preWEMWBS7.standardizedScore,
+        post_wemwbs7_score: payload.computed_report.analytics.postWEMWBS7.standardizedScore,
+        mental_growth: payload.computed_report.analytics.mentalGrowth.score,
+        confidence_index: payload.computed_report.analytics.confidenceIndex,
+        physical_index: payload.computed_report.analytics.physicalIndex,
+        social_index: payload.computed_report.analytics.socialIndex,
+        retention_index: payload.computed_report.analytics.retentionIndex,
+        tournament_impact_score: payload.computed_report.analytics.tournamentImpactScore,
+        mental_growth_label: payload.computed_report.analytics.mentalGrowth.label,
+        pre_wemwbs7_label: payload.computed_report.analytics.preWEMWBS7.label,
+        post_wemwbs7_label: payload.computed_report.analytics.postWEMWBS7.label,
+      };
+      
+      await fetch("/api/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(analyticsPayload),
+      });
+      
     } catch (error) {
       console.error("Submission error:", error);
     }
@@ -184,6 +252,15 @@ export default function App() {
     }
 
     setIsSubmitting(true);
+    
+    // === SUBMISSION DEBUG LOGGING ===
+    console.log("=== SUBMISSION DEBUG ===");
+    console.log("Selected player:", selectedPlayer);
+    console.log("selectedPre value:", selectedPre);
+    console.log("selectedPre type:", typeof selectedPre);
+    console.log("Answers being submitted:", answers);
+    console.log("=== END SUBMISSION DEBUG ===");
+    
     const computed = computeReport(answers, selectedPre);
     const submission: PostSurveySubmission = {
       player_name: selectedPlayer,
@@ -594,38 +671,54 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
         padding: 24px;
         border-radius: 12px;
         font-family: system-ui, -apple-system, sans-serif;
-        min-height: 600px;
+        min-height: 700px;
         width: 600px;
         position: relative;
       `;
       
-      // Calculate WEMWBS score (assuming mentalWellnessChange is the score)
-      const wemwbsScore = report.mentalWellnessChange;
-      const wemwbsLevel = wemwbsScore >= 70 ? 'Excellent' : wemwbsScore >= 60 ? 'Good' : wemwbsScore >= 50 ? 'Average' : 'Needs Improvement';
+      const { analytics } = report;
       
       // Build the report content manually
       const reportHTML = `
         <div style="text-align: center; margin-bottom: 24px;">
           <h2 style="color: #ffffff; font-size: 24px; font-weight: 800; margin-bottom: 8px;">${name}</h2>
-          <p style="color: #00f4e3; font-size: 18px; font-weight: 700;">Ziva Growth Report</p>
+          <p style="color: #00f4e3; font-size: 18px; font-weight: 700;">Ziva Tournament Analytics Report</p>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
           <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #00f4e3;">
-            <p style="color: #00f4e3; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">CONFIDENCE</p>
-            <p style="color: #00f4e3; font-size: 24px; font-weight: 800; margin: 0;">${report.confidenceScore}%</p>
+            <p style="color: #00f4e3; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">PRE WEMWBS-7</p>
+            <p style="color: #00f4e3; font-size: 24px; font-weight: 800; margin: 0;">${analytics.preWEMWBS7.standardizedScore}</p>
+            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${analytics.preWEMWBS7.label}</p>
           </div>
           <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #2efd7c;">
-            <p style="color: #2efd7c; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">ENERGY</p>
-            <p style="color: #2efd7c; font-size: 24px; font-weight: 800; margin: 0;">${report.energyScore}%</p>
+            <p style="color: #2efd7c; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">POST WEMWBS-7</p>
+            <p style="color: #2efd7c; font-size: 24px; font-weight: 800; margin: 0;">${analytics.postWEMWBS7.standardizedScore}</p>
+            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${analytics.postWEMWBS7.label}</p>
           </div>
           <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #6366f1;">
-            <p style="color: #6366f1; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">SOCIAL</p>
-            <p style="color: #6366f1; font-size: 24px; font-weight: 800; margin: 0;">${report.socialConfidence}%</p>
+            <p style="color: #6366f1; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">MENTAL GROWTH</p>
+            <p style="color: #6366f1; font-size: 24px; font-weight: 800; margin: 0;">${analytics.mentalGrowth.score > 0 ? '+' : ''}${analytics.mentalGrowth.score}</p>
+            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${analytics.mentalGrowth.label}</p>
           </div>
-          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #9333ea;">
-            <p style="color: #9333ea; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">WEMWBS SCORE</p>
-            <p style="color: #9333ea; font-size: 24px; font-weight: 800; margin: 0;">${wemwbsScore}</p>
-            <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">${wemwbsLevel}</p>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <p style="color: #f59e0b; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">CONFIDENCE INDEX</p>
+            <p style="color: #f59e0b; font-size: 24px; font-weight: 800; margin: 0;">${analytics.confidenceIndex}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #ef4444;">
+            <p style="color: #ef4444; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">PHYSICAL INDEX</p>
+            <p style="color: #ef4444; font-size: 24px; font-weight: 800; margin: 0;">${analytics.physicalIndex}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #8b5cf6;">
+            <p style="color: #8b5cf6; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">SOCIAL INDEX</p>
+            <p style="color: #8b5cf6; font-size: 24px; font-weight: 800; margin: 0;">${analytics.socialIndex}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #06b6d4;">
+            <p style="color: #06b6d4; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">RETENTION INDEX</p>
+            <p style="color: #06b6d4; font-size: 24px; font-weight: 800; margin: 0;">${analytics.retentionIndex}%</p>
+          </div>
+          <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; border-left: 4px solid #10b981;">
+            <p style="color: #10b981; font-size: 12px; font-weight: 600; margin: 0 0 8px 0;">TOURNAMENT IMPACT</p>
+            <p style="color: #10b981; font-size: 24px; font-weight: 800; margin: 0;">${analytics.tournamentImpactScore}%</p>
           </div>
         </div>
         <div style="background-color: #2a2a2a; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
@@ -638,13 +731,13 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
         </div>
         <div style="background-color: #1f2937; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #444;">
           <p style="color: #ffffff; font-size: 14px; font-weight: 700; margin: 0 0 8px 0;">📊 ASSESSMENT METHODOLOGY</p>
-          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">This report has been computed using the Warwick–Edinburgh Mental Well-being Scale (WEMWBS).</p>
-          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">WEMWBS is a validated 14-item scale measuring mental well-being and psychological functioning.</p>
-          <p style="color: #e0e0e0; font-size: 12px; margin: 0;">Score Range: 14-70 (Higher scores indicate better mental well-being)</p>
+          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">This report uses WEMWBS-7 for mental wellbeing assessment.</p>
+          <p style="color: #e0e0e0; font-size: 12px; margin: 0 0 4px 0;">Tournament Impact Score is weighted across multiple development indices.</p>
+          <p style="color: #e0e0e0; font-size: 12px; margin: 0;">All scores are normalized to 0-100 scale for comparison.</p>
         </div>
         <div style="text-align: center; padding-top: 16px; border-top: 1px solid #444; margin-top: 16px;">
           <p style="color: #00f4e3; font-size: 12px; margin: 0;">Generated on ${new Date().toLocaleDateString()}</p>
-          <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">Powered by WEMWBS Assessment</p>
+          <p style="color: #e0e0e0; font-size: 10px; margin: 4px 0 0 0;">Powered by Ziva Analytics</p>
         </div>
       `;
       
@@ -665,7 +758,7 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
           allowTaint: true,
           logging: false,
           width: 600,
-          height: 800,
+          height: 900,
         });
         
         console.log('Canvas created successfully');
@@ -676,7 +769,7 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${name.replace(/\s+/g, '_')}_growth_report.png`;
+            link.download = `${name.replace(/\s+/g, '_')}_analytics_report.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -707,33 +800,51 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
         </div>
       </div>
 
-      <div id="report-content" className="bg-surface-container-low p-6 rounded-lg shadow-lg mb-6 border border-outline-variant/20" style={{ backgroundColor: '#1a1a1a', minHeight: '600px' }}>
+      <div id="report-content" className="bg-surface-container-low p-6 rounded-lg shadow-lg mb-6 border border-outline-variant/20" style={{ backgroundColor: '#1a1a1a', minHeight: '700px' }}>
         <div className="text-center mb-6">
           <h2 className="text-2xl font-extrabold tracking-tight text-on-surface" style={{ color: '#ffffff' }}>
             {name}
           </h2>
-          <p className="text-lg font-bold text-primary mt-1" style={{ color: '#00f4e3' }}>Ziva Growth Report</p>
+          <p className="text-lg font-bold text-primary mt-1" style={{ color: '#00f4e3' }}>Ziva Tournament Analytics Report</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="glass-card p-4 rounded-lg border-l-2 border-primary">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#00f4e3' }}>Confidence</p>
-            <p className="text-2xl font-black text-primary" style={{ color: '#00f4e3' }}>{report.confidenceScore}%</p>
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#00f4e3' }}>Pre WEMWBS-7</p>
+            <p className="text-2xl font-black text-primary" style={{ color: '#00f4e3' }}>{report.analytics.preWEMWBS7.standardizedScore}</p>
+            <p className="text-xs text-on-surface-variant mt-1" style={{ color: '#e0e0e0' }}>{report.analytics.preWEMWBS7.label}</p>
           </div>
           <div className="glass-card p-4 rounded-lg border-l-2 border-secondary">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#2efd7c' }}>Energy</p>
-            <p className="text-2xl font-black text-secondary" style={{ color: '#2efd7c' }}>{report.energyScore}%</p>
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#2efd7c' }}>Post WEMWBS-7</p>
+            <p className="text-2xl font-black text-secondary" style={{ color: '#2efd7c' }}>{report.analytics.postWEMWBS7.standardizedScore}</p>
+            <p className="text-xs text-on-surface-variant mt-1" style={{ color: '#e0e0e0' }}>{report.analytics.postWEMWBS7.label}</p>
           </div>
-          <div className="glass-card p-4 rounded-lg border-l-2 border-tertiary">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#6366f1' }}>Social</p>
-            <p className="text-2xl font-black text-tertiary" style={{ color: '#6366f1' }}>{report.socialConfidence}%</p>
-          </div>
-          <div className="glass-card p-4 rounded-lg border-l-2 border-purple-600">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#9333ea' }}>WEMWBS Score</p>
-            <p className="text-2xl font-black" style={{ color: '#9333ea' }}>{report.mentalWellnessChange}</p>
-            <p className="text-xs text-on-surface-variant mt-1" style={{ color: '#e0e0e0' }}>
-              {report.mentalWellnessChange >= 70 ? 'Excellent' : report.mentalWellnessChange >= 60 ? 'Good' : report.mentalWellnessChange >= 50 ? 'Average' : 'Needs Improvement'}
+          <div className="glass-card p-4 rounded-lg border-l-2 border-blue-500">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#6366f1' }}>Mental Growth</p>
+            <p className="text-2xl font-black" style={{ color: '#6366f1' }}>
+              {report.analytics.mentalGrowth.score > 0 ? '+' : ''}{report.analytics.mentalGrowth.score}
             </p>
+            <p className="text-xs text-on-surface-variant mt-1" style={{ color: '#e0e0e0' }}>{report.analytics.mentalGrowth.label}</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-amber-500">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#f59e0b' }}>Confidence Index</p>
+            <p className="text-2xl font-black" style={{ color: '#f59e0b' }}>{report.analytics.confidenceIndex}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-red-500">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#ef4444' }}>Physical Index</p>
+            <p className="text-2xl font-black" style={{ color: '#ef4444' }}>{report.analytics.physicalIndex}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-purple-500">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#8b5cf6' }}>Social Index</p>
+            <p className="text-2xl font-black" style={{ color: '#8b5cf6' }}>{report.analytics.socialIndex}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-cyan-500">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#06b6d4' }}>Retention Index</p>
+            <p className="text-2xl font-black" style={{ color: '#06b6d4' }}>{report.analytics.retentionIndex}%</p>
+          </div>
+          <div className="glass-card p-4 rounded-lg border-l-2 border-green-500">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-1" style={{ color: '#10b981' }}>Tournament Impact</p>
+            <p className="text-2xl font-black" style={{ color: '#10b981' }}>{report.analytics.tournamentImpactScore}%</p>
           </div>
         </div>
 
@@ -756,18 +867,18 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
             📊 Assessment Methodology
           </p>
           <p className="text-sm text-on-surface-variant mb-2" style={{ color: '#e0e0e0' }}>
-            This report has been computed using the Warwick–Edinburgh Mental Well-being Scale (WEMWBS).
+            This report uses WEMWBS-7 for mental wellbeing assessment.
           </p>
           <p className="text-sm text-on-surface-variant mb-2" style={{ color: '#e0e0e0' }}>
-            WEMWBS is a validated 14-item scale measuring mental well-being and psychological functioning.
+            Tournament Impact Score is weighted across multiple development indices.
           </p>
           <p className="text-sm text-on-surface-variant" style={{ color: '#e0e0e0' }}>
-            Score Range: 14-70 (Higher scores indicate better mental well-being)
+            All scores are normalized to 0-100 scale for comparison.
           </p>
         </div>
         <div className="text-center text-xs text-on-surface-variant mt-4 pt-4 border-t border-outline-variant/20" style={{ color: '#00f4e3', borderTopColor: '#444' }}>
           Generated on {new Date().toLocaleDateString()}
-          <p className="text-xs mt-1" style={{ color: '#e0e0e0' }}>Powered by WEMWBS Assessment</p>
+          <p className="text-xs mt-1" style={{ color: '#e0e0e0' }}>Powered by Ziva Analytics</p>
         </div>
       </div>
 
@@ -790,8 +901,39 @@ function CompletionPage({ name, report, onReset }: { name: string; report: Compu
 function AdminPage({ submissions, onBack }: { submissions: PostSurveySubmission[]; onBack: () => void }) {
   const total = submissions.length;
   const avg = (items: number[]) => (items.length ? Math.round(items.reduce((a, b) => a + b, 0) / items.length) : 0);
-  const avgConfidenceImprovement = avg(submissions.map((s) => s.computed_report.confidenceScore));
-  const avgMentalWellnessChange = avg(submissions.map((s) => s.computed_report.mentalWellnessChange));
+  
+  const cohortAnalytics = useMemo(() => {
+    if (submissions.length === 0) return null;
+    
+    const preWEMWBS7Scores = submissions.map(s => s.computed_report.analytics.preWEMWBS7.standardizedScore);
+    const postWEMWBS7Scores = submissions.map(s => s.computed_report.analytics.postWEMWBS7.standardizedScore);
+    const mentalGrowthScores = submissions.map(s => s.computed_report.analytics.mentalGrowth.score);
+    const confidenceIndices = submissions.map(s => s.computed_report.analytics.confidenceIndex);
+    const physicalIndices = submissions.map(s => s.computed_report.analytics.physicalIndex);
+    const socialIndices = submissions.map(s => s.computed_report.analytics.socialIndex);
+    const retentionIndices = submissions.map(s => s.computed_report.analytics.retentionIndex);
+    const tournamentImpactScores = submissions.map(s => s.computed_report.analytics.tournamentImpactScore);
+    
+    const improvementDistribution = {
+      strongImprovement: mentalGrowthScores.filter(score => score >= 15).length,
+      moderateImprovement: mentalGrowthScores.filter(score => score >= 5 && score < 15).length,
+      stable: mentalGrowthScores.filter(score => score >= -4 && score < 5).length,
+      decline: mentalGrowthScores.filter(score => score < -4).length,
+    };
+    
+    return {
+      averagePreWEMWBS7: avg(preWEMWBS7Scores),
+      averagePostWEMWBS7: avg(postWEMWBS7Scores),
+      averageMentalGrowth: avg(mentalGrowthScores),
+      averageConfidenceIndex: avg(confidenceIndices),
+      averagePhysicalIndex: avg(physicalIndices),
+      averageSocialIndex: avg(socialIndices),
+      averageRetentionIndex: avg(retentionIndices),
+      averageTournamentImpactScore: avg(tournamentImpactScores),
+      improvementDistribution,
+    };
+  }, [submissions]);
+  
   const participationYes = submissions.filter((s) => s.answers[17] === "Yes").length;
   const participationIntent = total ? Math.round((participationYes / total) * 100) : 0;
   const knownSports = ["cricket", "football", "badminton", "basketball", "tennis", "volleyball", "kabaddi"];
@@ -807,12 +949,75 @@ function AdminPage({ submissions, onBack }: { submissions: PostSurveySubmission[
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 p-6 space-y-3">
-      <h2 className="text-xl font-black mb-2">Admin Analytics</h2>
-      <MetricCard label="Total submissions" value={String(total)} icon={<BarChart3 className="w-4 h-4 text-secondary" />} />
-      <MetricCard label="Avg confidence improvement" value={`${avgConfidenceImprovement}%`} />
-      <MetricCard label="Avg mental wellness change" value={`${avgMentalWellnessChange}%`} />
-      <MetricCard label="Participation intent (Yes %)" value={`${participationIntent}%`} />
-      <MetricCard label="Most requested future sport" value={mostRequestedFutureSport} />
+      <h2 className="text-xl font-black mb-2">Tournament Analytics Dashboard</h2>
+      
+      {cohortAnalytics && (
+        <>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MetricCard label="Total Players" value={String(total)} icon={<Users className="w-4 h-4 text-secondary" />} />
+            <MetricCard label="Avg Tournament Impact" value={`${cohortAnalytics.averageTournamentImpactScore}%`} icon={<Target className="w-4 h-4 text-primary" />} />
+          </div>
+          
+          <div className="glass-card p-4 rounded-lg mb-4">
+            <h3 className="font-bold mb-3 text-on-surface flex items-center gap-2">
+              <Heart className="w-4 h-4 text-primary" />
+              Mental Wellbeing (WEMWBS-7)
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <MetricCard label="Avg Pre-Score" value={`${cohortAnalytics.averagePreWEMWBS7}`} />
+              <MetricCard label="Avg Post-Score" value={`${cohortAnalytics.averagePostWEMWBS7}`} />
+              <MetricCard label="Avg Growth" value={`${cohortAnalytics.averageMentalGrowth > 0 ? '+' : ''}${cohortAnalytics.averageMentalGrowth}`} />
+            </div>
+          </div>
+          
+          <div className="glass-card p-4 rounded-lg mb-4">
+            <h3 className="font-bold mb-3 text-on-surface flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-secondary" />
+              Development Indices
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <MetricCard label="Confidence Index" value={`${cohortAnalytics.averageConfidenceIndex}%`} />
+              <MetricCard label="Physical Index" value={`${cohortAnalytics.averagePhysicalIndex}%`} />
+              <MetricCard label="Social Index" value={`${cohortAnalytics.averageSocialIndex}%`} />
+              <MetricCard label="Retention Index" value={`${cohortAnalytics.averageRetentionIndex}%`} />
+            </div>
+          </div>
+          
+          <div className="glass-card p-4 rounded-lg mb-4">
+            <h3 className="font-bold mb-3 text-on-surface">Mental Growth Distribution</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-on-surface-variant">Strong Improvement (≥15)</span>
+                <span className="font-bold text-green-500">{cohortAnalytics.improvementDistribution.strongImprovement}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-on-surface-variant">Moderate Improvement (5-14)</span>
+                <span className="font-bold text-blue-500">{cohortAnalytics.improvementDistribution.moderateImprovement}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-on-surface-variant">Stable (-4 to 4)</span>
+                <span className="font-bold text-yellow-500">{cohortAnalytics.improvementDistribution.stable}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-on-surface-variant">Decline (≤-5)</span>
+                <span className="font-bold text-red-500">{cohortAnalytics.improvementDistribution.decline}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <MetricCard label="Participation Intent (Yes %)" value={`${participationIntent}%`} />
+            <MetricCard label="Most Requested Sport" value={mostRequestedFutureSport} />
+          </div>
+        </>
+      )}
+      
+      {!cohortAnalytics && (
+        <div className="glass-card p-6 rounded-lg text-center">
+          <p className="text-on-surface-variant">No submissions yet. Analytics will appear here once players complete the survey.</p>
+        </div>
+      )}
+      
       <button onClick={onBack} className="w-full mt-3 py-3 rounded-full bg-surface-container-high border border-outline-variant/30 font-bold text-xs uppercase tracking-widest">
         Back
       </button>

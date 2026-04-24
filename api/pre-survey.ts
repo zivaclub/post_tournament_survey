@@ -51,6 +51,10 @@ export default async function handler(req: any, res: any) {
     });
 
     console.log(`Fetched ${preSurveyData.length} pre-survey records from Google Sheet`);
+    console.log("Sample pre-survey data:", preSurveyData.slice(0, 2));
+    preSurveyData.forEach((record, index) => {
+      console.log(`Record ${index}: ${record.name}`, record.answers);
+    });
     return res.status(200).json(preSurveyData);
   } catch (error: any) {
     console.error("Error fetching pre-survey data:", error);
